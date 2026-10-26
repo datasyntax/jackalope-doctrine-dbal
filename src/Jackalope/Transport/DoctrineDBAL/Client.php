@@ -1974,7 +1974,7 @@ class Client extends BaseTransport implements QueryTransport, WritingInterface, 
             return;
         }
 
-        $ids = implode($ids, ',');
+        $ids = implode(',', $ids);
 
         $updateLocalNameCase .= 'ELSE local_name END, ';
         $updateSortOrderCase .= 'ELSE sort_order END ';
