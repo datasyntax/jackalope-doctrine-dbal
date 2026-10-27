@@ -1624,6 +1624,9 @@ class Client extends BaseTransport implements QueryTransport, WritingInterface, 
             if ($this->getConnection()->getDriver() instanceof \Doctrine\DBAL\Driver\PDOMySql\Driver) {
                 $query = 'SELECT id FROM phpcr_nodes WHERE path COLLATE ' . $this->getCaseSensitiveEncoding(
                     ) . ' = ? AND workspace_name = ?';
+            } elseif ($this->getConnection()->getDatabasePlatform() instanceof SQLServerPlatform) {
+                // PHPCR paths are case-sensitive, SQL Server collations usually are not
+                $query = 'SELECT id FROM phpcr_nodes WHERE path = ? COLLATE SQL_Latin1_General_CP1_CS_AS AND workspace_name = ?';
             } else {
                 $query = 'SELECT id FROM phpcr_nodes WHERE path = ? AND workspace_name = ?';
             }
