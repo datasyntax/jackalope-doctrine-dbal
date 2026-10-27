@@ -2003,7 +2003,12 @@ class Client extends BaseTransport implements QueryTransport, WritingInterface, 
                 $values[':localname' . $i] = $localName;
 
                 $updateLocalNameCase .= "WHEN id = :id$i THEN :localname$i ";
-                $updateSortOrderCase .= "WHEN id = :id$i THEN (SELECT * FROM ( SELECT MAX(x.sort_order) + 1 FROM phpcr_nodes x WHERE x.parent = :parent$i) y) ";
+                if ($this->getConnection()->getDatabasePlatform() instanceof SQLServerPlatform) {
+                    // the derived table below is a MySQL workaround; SQL Server rejects its unnamed column
+                    $updateSortOrderCase .= "WHEN id = :id$i THEN (SELECT MAX(x.sort_order) + 1 FROM phpcr_nodes x WHERE x.parent = :parent$i) ";
+                } else {
+                    $updateSortOrderCase .= "WHEN id = :id$i THEN (SELECT * FROM ( SELECT MAX(x.sort_order) + 1 FROM phpcr_nodes x WHERE x.parent = :parent$i) y) ";
+                }
             }
 
             $ids[] = $row['id'];
