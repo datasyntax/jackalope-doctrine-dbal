@@ -10,6 +10,7 @@ use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DBALException;
 use Doctrine\DBAL\Platforms\PostgreSqlPlatform;
 use Doctrine\DBAL\Platforms\SqlitePlatform;
+use Doctrine\DBAL\Platforms\SQLServerPlatform;
 use DOMDocument;
 use DOMElement;
 use DOMXPath;
@@ -241,7 +242,7 @@ class Client extends BaseTransport implements QueryTransport, WritingInterface, 
                     return null;
                 }
 
-                $dom = new DOMDocument('1.0', 'UTF-8');
+                $dom = $this->createDomDocument();
                 $dom->loadXML($string);
                 $xpath = new DOMXPath($dom);
                 $list = $xpath->evaluate($expression);
@@ -353,6 +354,9 @@ class Client extends BaseTransport implements QueryTransport, WritingInterface, 
             throw new RepositoryException("Couldn't create Workspace '$name': " . $e->getMessage(), 0, $e);
         }
 
+        // SQL Server stores props in an xml column (UTF-16 internally), which rejects a UTF-8 declaration.
+        $encoding = $this->getConnection()->getDatabasePlatform() instanceof SQLServerPlatform ? 'UTF-16' : 'UTF-8';
+
         $this->getConnection()->insert(
             'phpcr_nodes',
             [
@@ -363,7 +367,7 @@ class Client extends BaseTransport implements QueryTransport, WritingInterface, 
                 'type' => 'nt:unstructured',
                 'local_name' => '',
                 'namespace' => '',
-                'props' => '<?xml version="1.0" encoding="UTF-8"?>
+                'props' => '<?xml version="1.0" encoding="' . $encoding . '"?>
 <sv:node xmlns:' . NS::PREFIX_MIX . '="' . NS::NAMESPACE_MIX . '" xmlns:' . NS::PREFIX_NT . '="' . NS::NAMESPACE_NT . '" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:' . NS::PREFIX_JCR . '="' . NS::NAMESPACE_JCR . '" xmlns:' . NS::PREFIX_SV . '="' . NS::NAMESPACE_SV . '" xmlns:rep="internal" />',
                 // TODO compute proper value
                 'depth' => 0,
@@ -726,11 +730,11 @@ class Client extends BaseTransport implements QueryTransport, WritingInterface, 
         foreach ($rows as $row) {
             $newPath = str_replace($srcAbsPath, $dstAbsPath, $row['path']);
 
-            $stringDom = new DOMDocument('1.0', 'UTF-8');
+            $stringDom = $this->createDomDocument();
             $stringDom->loadXML($row['props']);
             $numericalDom = null;
             if ($row['numerical_props']) {
-                $numericalDom = new DOMDocument('1.0', 'UTF-8');
+                $numericalDom = $this->createDomDocument();
                 $numericalDom->loadXML($row['numerical_props']);
             }
 
@@ -1101,7 +1105,7 @@ class Client extends BaseTransport implements QueryTransport, WritingInterface, 
     {
         $data = new stdClass();
 
-        $dom = new DOMDocument('1.0', 'UTF-8');
+        $dom = $this->createDomDocument();
         $dom->loadXML($xml);
 
         foreach ($dom->getElementsByTagNameNS('http://www.jcp.org/jcr/sv/1.0', 'property') as $propertyNode) {
@@ -1331,7 +1335,7 @@ class Client extends BaseTransport implements QueryTransport, WritingInterface, 
         ];
 
         foreach ($doms as $targetDom => $properties) {
-            $dom = new DOMDocument('1.0', 'UTF-8');
+            $dom = $this->createDomDocument();
             $rootNode = $dom->createElement('sv:node');
             foreach ($namespaces as $namespace => $uri) {
                 $rootNode->setAttribute('xmlns:' . $namespace, $uri);
@@ -1844,7 +1848,7 @@ class Client extends BaseTransport implements QueryTransport, WritingInterface, 
         $query = 'SELECT props FROM phpcr_nodes WHERE id = ?';
         $xml = $this->getConnection()->fetchColumn($query, [$nodeId]);
 
-        $dom = new DOMDocument('1.0', 'UTF-8');
+        $dom = $this->createDomDocument();
         $dom->loadXML($xml);
 
         $found = false;
@@ -2875,5 +2879,20 @@ phpcr_type_childs ON phpcr_type_nodes.node_type_id = phpcr_type_childs.node_type
         }
 
         $this->connectionInitialized = true;
+    }
+
+    /**
+     * SQL Server keeps props in xml columns, which reject documents declaring UTF-8,
+     * so documents written there must not carry an encoding declaration.
+     *
+     * @return DOMDocument
+     */
+    private function createDomDocument()
+    {
+        if ($this->getConnection()->getDatabasePlatform() instanceof SQLServerPlatform) {
+            return new DOMDocument('1.0');
+        }
+
+        return new DOMDocument('1.0', 'UTF-8');
     }
 }
