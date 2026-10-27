@@ -2051,11 +2051,11 @@ class Client extends BaseTransport implements QueryTransport, WritingInterface, 
         $this->assertLoggedIn();
 
         $values[':absPath'] = $node->getPath();
-        $sql = "UPDATE phpcr_nodes SET sort_order = CASE CONCAT(
-          namespace,
-          (CASE namespace WHEN '' THEN '' ELSE ':' END),
-          local_name
-        )";
+        $sql = 'UPDATE phpcr_nodes SET sort_order = CASE ' . $this->getConnection()->getDatabasePlatform()->getConcatExpression(
+            'namespace',
+            "(CASE namespace WHEN '' THEN '' ELSE ':' END)",
+            'local_name'
+        );
 
         $i = 0;
 
@@ -2720,7 +2720,8 @@ phpcr_type_childs ON phpcr_type_nodes.node_type_id = phpcr_type_childs.node_type
         $params = [$targetId];
 
         $table = $weakReference ? $this->referenceTables[PropertyType::WEAKREFERENCE] : $this->referenceTables[PropertyType::REFERENCE];
-        $query = "SELECT CONCAT(n.path, '/', r.source_property_name) FROM phpcr_nodes n
+        $pathExpression = $this->getConnection()->getDatabasePlatform()->getConcatExpression('n.path', "'/'", 'r.source_property_name');
+        $query = "SELECT $pathExpression FROM phpcr_nodes n
                INNER JOIN $table r ON n.id = r.source_id
                WHERE r.target_id = ?";
         if (null !== $name) {
