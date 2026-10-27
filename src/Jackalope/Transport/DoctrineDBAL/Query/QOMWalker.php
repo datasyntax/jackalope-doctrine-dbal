@@ -21,6 +21,7 @@ use Doctrine\DBAL\Platforms\AbstractPlatform;
 use Doctrine\DBAL\Platforms\MySqlPlatform;
 use Doctrine\DBAL\Platforms\PostgreSqlPlatform;
 use Doctrine\DBAL\Platforms\SqlitePlatform;
+use Doctrine\DBAL\Platforms\SQLServerPlatform;
 
 /**
  * Converts QOM to SQL Statements for the Doctrine DBAL database backend.
@@ -955,6 +956,10 @@ class QOMWalker
             return "EXTRACTVALUE($alias.$column, '//sv:property[@sv:name=\"" . $property . "\"]/sv:value[1]')";
         }
 
+        if ($this->platform instanceof SQLServerPlatform) {
+            return "$alias.$column.value('" . $this->sqlXpathSQLServerNamespaces() . "(//sv:property[@sv:name=\"" . $property . "\"]/sv:value/text())[1]', 'nvarchar(max)')";
+        }
+
         throw new NotImplementedException("Xpath evaluations cannot be executed with '" . $this->platform->getName() . "' yet.");
     }
 
@@ -979,6 +984,10 @@ class QOMWalker
 
         if ($this->platform instanceof SqlitePlatform) {
             return sprintf("EXTRACTVALUE(%s.props, '//sv:property[@sv:name=\"%s\"]/sv:value[%d]/@%s')", $alias, $property, $valueIndex, $attribute);
+        }
+
+        if ($this->platform instanceof SQLServerPlatform) {
+            return sprintf("%s.props.value('%s(//sv:property[@sv:name=\"%s\"]/sv:value)[%d]/@%s', 'nvarchar(max)')", $alias, $this->sqlXpathSQLServerNamespaces(), $property, $valueIndex, $attribute);
         }
 
         throw new NotImplementedException("Xpath evaluations cannot be executed with '" . $this->platform->getName() . "' yet.");
@@ -1007,6 +1016,8 @@ class QOMWalker
             $expression = "xpath_exists('//sv:property[@sv:name=\"" . $property . "\"]/sv:value[text()%s%s]', CAST($alias.props AS xml), ".$this->sqlXpathPostgreSQLNamespaces().") = 't'";
         } elseif ($this->platform instanceof SqlitePlatform) {
             $expression = "EXTRACTVALUE($alias.props, 'count(//sv:property[@sv:name=\"" . $property . "\"]/sv:value[text()%s%s]) > 0')";
+        } elseif ($this->platform instanceof SQLServerPlatform) {
+            $expression = "$alias.props.value('" . $this->sqlXpathSQLServerNamespaces() . "count(//sv:property[@sv:name=\"" . $property . "\"]/sv:value[text()%s%s]) > 0', 'bit') = 1";
         } else {
             throw new NotImplementedException("Xpath evaluations cannot be executed with '" . $this->platform->getName() . "' yet.");
         }
@@ -1020,6 +1031,16 @@ class QOMWalker
     private function sqlXpathPostgreSQLNamespaces()
     {
         return "ARRAY[ARRAY['sv', 'http://www.jcp.org/jcr/sv/1.0']]";
+    }
+
+    /**
+     * XQuery prolog declaring the sv namespace for SQL Server xml column methods.
+     *
+     * @return string
+     */
+    private function sqlXpathSQLServerNamespaces()
+    {
+        return 'declare namespace sv="http://www.jcp.org/jcr/sv/1.0"; ';
     }
 
     /**
